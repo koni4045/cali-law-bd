@@ -1,0 +1,22 @@
+body { font-family: -apple-system, Helvetica, Arial, sans-serif; margin: 0; padding: 2rem; background: #f6f7f9; color: #1a1a1a; }
+header h1 { margin-bottom: 0; }
+.subtitle { color: #666; margin-top: 0.2rem; }
+.stat-grid { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.5rem 0; }
+.card { background: #fff; border-radius: 8px; padding: 1rem 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); min-width: 120px; text-align: center; }
+.card .num { display: block; font-size: 1.8rem; font-weight: 700; }
+.card .label { display: block; color: #666; font-size: 0.85rem; }
+.bucket-grid { display: flex; gap: 1rem; }
+.bucket { flex: 1; padding: 1rem; border-radius: 8px; text-align: center; color: #fff; font-weight: 600; }
+.bucket span { font-size: 1.5rem; }
+.bucket.hot { background: #d9534f; }
+.bucket.warm { background: #f0ad4e; }
+.bucket.nurture { background: #5bc0de; }
+.bucket.monitor { background: #999; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 0.6rem 1rem; border-bottom: 1px solid #eee; }
+.badge { padding: 0.2rem 0.6rem; border-radius: 4px; color: #fff; font-size: 0.8rem; }
+.badge.hot { background: #d9534f; }
+.badge.warm { background: #f0ad4e; }
+.badge.nurture { background: #5bc0de; }
+.badge.monitor { background: #999; }
+footer { margin-top: 2rem; color: #888; font-size: 0.8rem; }

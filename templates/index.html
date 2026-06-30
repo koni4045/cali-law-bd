@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CA Law Firm BD Automation - MVP</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>California Law Firm Recruiting / BD Dashboard</h1>
+    <p class="subtitle">Phase 1 MVP &mdash; California only</p>
+  </header>
+
+  <section class="stat-grid">
+    <div class="card"><span class="num">{{ firm_count }}</span><span class="label">Firms</span></div>
+    <div class="card"><span class="num">{{ job_count }}</span><span class="label">Active Jobs</span></div>
+    <div class="card"><span class="num">{{ dm_count }}</span><span class="label">Decision Makers</span></div>
+    <div class="card"><span class="num">{{ candidate_count }}</span><span class="label">Candidates</span></div>
+    <div class="card"><span class="num">{{ matched_candidates }}</span><span class="label">Matched Candidates</span></div>
+    <div class="card"><span class="num">{{ pending_drafts }}</span><span class="label">Pending Email Approvals</span></div>
+  </section>
+
+  <section>
+    <h2>Firms by Score Bucket</h2>
+    <div class="bucket-grid">
+      <div class="bucket hot">Hot<br><span>{{ bucket_counts.get('Hot', 0) }}</span></div>
+      <div class="bucket warm">Warm<br><span>{{ bucket_counts.get('Warm', 0) }}</span></div>
+      <div class="bucket nurture">Nurture<br><span>{{ bucket_counts.get('Nurture', 0) }}</span></div>
+      <div class="bucket monitor">Monitor<br><span>{{ bucket_counts.get('Monitor', 0) }}</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Top Leads</h2>
+    <table>
+      <thead><tr><th>Firm</th><th>City</th><th>Score</th><th>Bucket</th></tr></thead>
+      <tbody>
+        {% for lead in top_leads %}
+        <tr>
+          <td>{{ lead['name'] }}</td>
+          <td>{{ lead['city'] }}</td>
+          <td>{{ lead['score'] }}</td>
+          <td><span class="badge {{ lead['bucket']|lower }}">{{ lead['bucket'] }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Open Jobs by Role</h2>
+    <table>
+      <thead><tr><th>Title</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for j in jobs_by_role %}
+        <tr><td>{{ j['title'] }}</td><td>{{ j['c'] }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    <p>API endpoints: /firms/seed, /jobs/collect, /jobs/collect-linkedin, /firms/{id}/enrich, /candidates/upload, /match, /leads/recompute, /email-drafts/generate, /email-drafts/{id}/approve</p>
+  </footer>
+</body>
+</html>
