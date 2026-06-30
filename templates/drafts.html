@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Approval Queue – CA Law Firm BD</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <span class="brand">CA Law Firm BD</span>
+    <a href="/">Dashboard</a>
+    <a href="/drafts" class="active">Approval Queue</a>
+  </nav>
+
+  <div class="page">
+    <h1>Approval Queue</h1>
+
+    <!-- Status tabs -->
+    <div class="tabs">
+      <a href="/drafts?status=pending_approval" class="tab {% if current_status == 'pending_approval' %}active{% endif %}">
+        Pending <span class="badge-count">{{ counts.get('pending_approval', 0) }}</span>
+      </a>
+      <a href="/drafts?status=enrolled" class="tab {% if current_status == 'enrolled' %}active{% endif %}">
+        Enrolled <span class="badge-count">{{ counts.get('enrolled', 0) }}</span>
+      </a>
+      <a href="/drafts?status=approved" class="tab {% if current_status == 'approved' %}active{% endif %}">
+        Approved <span class="badge-count">{{ counts.get('approved', 0) }}</span>
+      </a>
+      <a href="/drafts?status=rejected" class="tab {% if current_status == 'rejected' %}active{% endif %}">
+        Rejected <span class="badge-count">{{ counts.get('rejected', 0) }}</span>
+      </a>
+    </div>
+
+    {% if drafts %}
+    <div class="draft-list">
+      {% for d in drafts %}
+      <div class="draft-card" id="draft-{{ d['id'] }}">
+        <div class="draft-meta">
+          <div class="draft-meta-left">
+            <span class="badge {{ d['template_type'].replace('_','-') }}">{{ d['template_type'].replace('_',' ') }}</span>
+            <a href="/firms/view/{{ d['firm_id'] }}" class="firm-link">{{ d['firm_name'] }}</a>
+            <span class="muted">{{ d['city'] or '' }}</span>
+          </div>
+          <span class="muted">{{ d['created_at'][:10] }}</span>
+        </div>
+
+        <div class="draft-to">
+          <strong>To:</strong>
+          {% if d['dm_name'] %}
+            {{ d['dm_name'] }}{% if d['dm_title'] %} · {{ d['dm_title'] }}{% endif %}
+            {% if d['dm_email'] %} &lt;{{ d['dm_email'] }}&gt;{% endif %}
+          {% else %}
+            <span class="muted">No decision maker assigned</span>
+          {% endif %}
+          {% if d['candidate_name'] %}
+          &nbsp;·&nbsp; <strong>Re candidate:</strong> {{ d['candidate_name'] }} ({{ d['role_type'] }})
+          {% endif %}
+        </div>
+
+        <div class="draft-email">
+          <div class="draft-subject">{{ d['subject'] }}</div>
+          <pre class="draft-body">{{ d['body'] }}</pre>
+        </div>
+
+        {% if current_status == 'pending_approval' %}
+        <div class="draft-actions">
+          <button class="btn primary" onclick="approveDraft({{ d['id'] }})">Approve &amp; Enroll in Sequence</button>
+          <button class="btn danger" onclick="rejectDraft({{ d['id'] }})">Reject</button>
+        </div>
+        <div id="result-{{ d['id'] }}" class="result-box hidden"></div>
+        {% else %}
+        <div class="draft-actions">
+          <span class="status {{ d['status'] }}">● {{ d['status'] }}</span>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="empty-state">
+      <p>No drafts with status <strong>{{ current_status }}</strong>.</p>
+      {% if current_status == 'pending_approval' %}
+      <p>Go to a <a href="/">firm in the dashboard</a>, click View, and generate a draft.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <script>
+    async function approveDraft(id) {
+      const btn = document.querySelector(`#draft-${id} .btn.primary`);
+      btn.textContent = 'Enrolling...'; btn.disabled = true;
+      const r = await fetch(`/email-drafts/${id}/approve`, {method:'POST'});
+      const d = await r.json();
+      const box = document.getElementById(`result-${id}`);
+      box.classList.remove('hidden');
+      if (d.enrollment && d.enrollment.enrolled) {
+        box.innerHTML = `✓ Enrolled in Apollo sequence — swalden@mail.zirone.com will send the Day 0 email shortly.`;
+        box.className = 'result-box success';
+        document.getElementById(`draft-${id}`).classList.add('done');
+      } else {
+        const reason = (d.enrollment && d.enrollment.reason) || 'unknown error';
+        box.innerHTML = `⚠ Draft approved but not enrolled: ${reason}. <a href="/drafts?status=approved">View approved drafts.</a>`;
+        box.className = 'result-box warning';
+      }
+      btn.disabled = true;
+      document.querySelector(`#draft-${id} .btn.danger`).disabled = true;
+    }
+
+    async function rejectDraft(id) {
+      if (!confirm('Reject this draft?')) return;
+      const r = await fetch(`/email-drafts/${id}/reject`, {method:'POST'});
+      const d = await r.json();
+      const card = document.getElementById(`draft-${id}`);
+      card.classList.add('done');
+      card.querySelector('.draft-actions').innerHTML = '<span class="status rejected">● Rejected</span>';
+    }
+  </script>
+</body>
+</html>

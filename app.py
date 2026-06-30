@@ -53,8 +53,13 @@ def dashboard(request: Request):
         firm_count = conn.execute("SELECT COUNT(*) c FROM firms").fetchone()["c"]
         job_count = conn.execute("SELECT COUNT(*) c FROM jobs WHERE active = 1").fetchone()["c"]
         top_leads = conn.execute(
-            """SELECT f.name, f.city, l.score, l.bucket FROM leads l
-               JOIN firms f ON f.id = l.firm_id ORDER BY l.score DESC LIMIT 25"""
+            """SELECT f.id, f.name, f.city, l.score, l.bucket,
+                 (SELECT COUNT(*) FROM jobs j WHERE j.firm_id=f.id AND j.active=1) AS job_count,
+                 (SELECT COUNT(*) FROM decision_makers d WHERE d.firm_id=f.id) AS dm_count,
+                 (SELECT COUNT(*) FROM decision_makers d WHERE d.firm_id=f.id AND d.email IS NOT NULL) AS dm_with_email,
+                 (SELECT COUNT(*) FROM email_drafts e WHERE e.firm_id=f.id AND e.status='pending_approval') AS pending,
+                 (SELECT COUNT(*) FROM decision_makers d WHERE d.firm_id=f.id AND d.enrollment_status='enrolled') AS enrolled
+               FROM leads l JOIN firms f ON f.id=l.firm_id ORDER BY l.score DESC LIMIT 50"""
         ).fetchall()
 
     return templates.TemplateResponse(request, "index.html", {
@@ -103,6 +108,62 @@ def seed_firms(practice_area: str = Form("law firm"), pages: int = Form(1)):
                     continue
         conn.commit()
     return {"firms_upserted": created}
+
+
+@app.get("/firms/view/{firm_id}", response_class=HTMLResponse)
+def firm_detail(request: Request, firm_id: int):
+    with get_conn() as conn:
+        firm = conn.execute("SELECT * FROM firms WHERE id = ?", (firm_id,)).fetchone()
+        if not firm:
+            raise HTTPException(404, "Firm not found")
+        lead = conn.execute("SELECT * FROM leads WHERE firm_id = ?", (firm_id,)).fetchone()
+        jobs = conn.execute(
+            "SELECT * FROM jobs WHERE firm_id = ? AND active = 1 ORDER BY posted_date DESC", (firm_id,)
+        ).fetchall()
+        dms = conn.execute(
+            "SELECT * FROM decision_makers WHERE firm_id = ? ORDER BY enrollment_status DESC, email DESC", (firm_id,)
+        ).fetchall()
+        candidates = conn.execute(
+            """SELECT c.*, m.match_score, m.match_reasons FROM matches m
+               JOIN candidates c ON c.id = m.candidate_id
+               WHERE m.firm_id = ? ORDER BY m.match_score DESC LIMIT 10""", (firm_id,)
+        ).fetchall()
+        drafts = conn.execute(
+            "SELECT * FROM email_drafts WHERE firm_id = ? ORDER BY created_at DESC LIMIT 10", (firm_id,)
+        ).fetchall()
+        all_candidates = conn.execute("SELECT id, name, role_type FROM candidates ORDER BY name").fetchall()
+    return templates.TemplateResponse(request, "firm.html", {
+        "firm": firm,
+        "lead": lead,
+        "jobs": jobs,
+        "dms": dms,
+        "candidates": candidates,
+        "drafts": drafts,
+        "all_candidates": all_candidates,
+    })
+
+
+@app.get("/drafts", response_class=HTMLResponse)
+def drafts_queue(request: Request, status: str = "pending_approval"):
+    with get_conn() as conn:
+        drafts = conn.execute(
+            """SELECT e.*, f.name AS firm_name, f.city,
+                 d.name AS dm_name, d.email AS dm_email, d.title AS dm_title,
+                 c.name AS candidate_name, c.role_type
+               FROM email_drafts e
+               LEFT JOIN firms f ON f.id = e.firm_id
+               LEFT JOIN decision_makers d ON d.id = e.decision_maker_id
+               LEFT JOIN candidates c ON c.id = e.candidate_id
+               WHERE e.status = ? ORDER BY e.created_at DESC""", (status,)
+        ).fetchall()
+        counts = {row["status"]: row["c"] for row in conn.execute(
+            "SELECT status, COUNT(*) c FROM email_drafts GROUP BY status"
+        ).fetchall()}
+    return templates.TemplateResponse(request, "drafts.html", {
+        "drafts": drafts,
+        "current_status": status,
+        "counts": counts,
+    })
 
 
 @app.get("/firms")

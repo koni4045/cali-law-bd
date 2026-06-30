@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ firm['name'] }} – CA Law Firm BD</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <span class="brand">CA Law Firm BD</span>
+    <a href="/">Dashboard</a>
+    <a href="/drafts">Approval Queue</a>
+  </nav>
+
+  <div class="page">
+    <div class="firm-header">
+      <div>
+        <h1>{{ firm['name'] }}</h1>
+        <p class="sub">{{ firm['city'] or 'California' }} · {{ firm['source'] }}
+          {% if firm['website'] %} · <a href="{{ firm['website'] }}" target="_blank">{{ firm['website'] }}</a>{% endif %}
+        </p>
+      </div>
+      {% if lead %}
+      <div class="score-block">
+        <span class="big-score">{{ lead['score'] }}</span>
+        <span class="badge {{ lead['bucket']|lower }}">{{ lead['bucket'] }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Generate Draft Form -->
+    <section class="card-panel">
+      <h2>Generate Outreach Draft</h2>
+      <form id="draftForm" class="inline-form">
+        <label>Template
+          <select name="template_type">
+            <option value="hidden_signal">Hidden Signal (no job required)</option>
+            <option value="job_found">Job Found</option>
+            <option value="candidate_first">Candidate First</option>
+          </select>
+        </label>
+        <label>Decision Maker
+          <select name="decision_maker_id">
+            <option value="">— none —</option>
+            {% for dm in dms %}
+            <option value="{{ dm['id'] }}" {% if dm['email'] %}style="font-weight:600"{% endif %}>
+              {{ dm['name'] }} – {{ dm['title'] }}{% if dm['email'] %} ✓{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Candidate (optional)
+          <select name="candidate_id">
+            <option value="">— none —</option>
+            {% for c in all_candidates %}
+            <option value="{{ c['id'] }}">{{ c['name'] }} ({{ c['role_type'] }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Job (optional)
+          <select name="job_id">
+            <option value="">— none —</option>
+            {% for j in jobs %}
+            <option value="{{ j['id'] }}">{{ j['title'] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="btn primary">Generate Draft</button>
+      </form>
+      <div id="draftResult" class="result-box hidden"></div>
+    </section>
+
+    <div class="two-col">
+      <!-- Decision Makers -->
+      <section>
+        <h2>Decision Makers <span class="count">{{ dms|length }}</span></h2>
+        {% if dms %}
+        <table>
+          <thead><tr><th>Name</th><th>Title</th><th>Email</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for dm in dms %}
+            <tr>
+              <td>{{ dm['name'] }}</td>
+              <td>{{ dm['title'] or '—' }}</td>
+              <td>
+                {% if dm['email'] %}
+                  <span class="green">{{ dm['email'] }}</span>
+                {% else %}
+                  <span class="muted">not revealed</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if dm['enrollment_status'] == 'enrolled' %}
+                  <span class="status enrolled">● Enrolled</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="muted">No decision makers yet. <a href="#" onclick="enrichFirm({{ firm['id'] }})">Enrich now →</a></p>
+        {% endif %}
+        <button class="btn secondary mt" onclick="enrichFirm({{ firm['id'] }})">Re-enrich via Apollo</button>
+        <div id="enrichResult" class="result-box hidden"></div>
+      </section>
+
+      <!-- Active Jobs -->
+      <section>
+        <h2>Active Jobs <span class="count">{{ jobs|length }}</span></h2>
+        {% if jobs %}
+        <table>
+          <thead><tr><th>Title</th><th>Location</th><th>Posted</th></tr></thead>
+          <tbody>
+            {% for j in jobs %}
+            <tr>
+              <td>
+                {% if j['source_url'] %}
+                  <a href="{{ j['source_url'] }}" target="_blank">{{ j['title'] }}</a>
+                {% else %}
+                  {{ j['title'] }}
+                {% endif %}
+              </td>
+              <td>{{ j['location'] or '—' }} <span class="muted">{{ j['work_mode'] or '' }}</span></td>
+              <td class="muted">{{ (j['posted_date'] or '')[:10] or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="muted">No active jobs found for this firm.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <!-- Matched Candidates -->
+    {% if candidates %}
+    <section>
+      <h2>Matched Candidates</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Role</th><th>Match Score</th><th>Reasons</th></tr></thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            <td>{{ c['name'] }}</td>
+            <td>{{ c['role_type'] }}</td>
+            <td><strong>{{ c['match_score'] }}</strong></td>
+            <td class="muted">{{ c['match_reasons'] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <!-- Draft History -->
+    {% if drafts %}
+    <section>
+      <h2>Draft History</h2>
+      <table>
+        <thead><tr><th>Created</th><th>Type</th><th>Subject</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for d in drafts %}
+          <tr>
+            <td class="muted">{{ d['created_at'][:10] }}</td>
+            <td>{{ d['template_type'] }}</td>
+            <td>{{ d['subject'] }}</td>
+            <td><span class="status {{ d['status'] }}">{{ d['status'] }}</span></td>
+            <td>
+              {% if d['status'] == 'pending_approval' %}
+              <a href="/drafts" class="btn small">Review →</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+  </div>
+
+  <script>
+    async function enrichFirm(id) {
+      const btn = document.querySelector('[onclick^="enrichFirm"]');
+      btn.textContent = 'Enriching...'; btn.disabled = true;
+      const r = await fetch(`/firms/${id}/enrich`, {method:'POST'});
+      const d = await r.json();
+      const box = document.getElementById('enrichResult');
+      box.classList.remove('hidden');
+      box.textContent = `Done — ${d.decision_makers_added} contacts added, ${d.emails_revealed} email(s) revealed.`;
+      btn.textContent = 'Re-enrich via Apollo'; btn.disabled = false;
+      setTimeout(() => location.reload(), 1500);
+    }
+
+    document.getElementById('draftForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const fd = new FormData(form);
+      fd.append('firm_id', '{{ firm["id"] }}');
+      const r = await fetch('/email-drafts/generate', {method:'POST', body: fd});
+      const d = await r.json();
+      const box = document.getElementById('draftResult');
+      box.classList.remove('hidden');
+      if (d.draft_id) {
+        box.innerHTML = `Draft #${d.draft_id} created — <a href="/drafts">Review in Approval Queue →</a>`;
+        box.className = 'result-box success';
+      } else {
+        box.textContent = JSON.stringify(d);
+        box.className = 'result-box error';
+      }
+    });
+  </script>
+</body>
+</html>
