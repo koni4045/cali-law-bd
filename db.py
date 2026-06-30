@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS decision_makers (
     linkedin_url TEXT,
     role_category TEXT,
     source TEXT,
+    apollo_contact_id TEXT,
+    enrollment_status TEXT DEFAULT 'not_enrolled',
     UNIQUE(firm_id, name, email)
 );
 
@@ -101,9 +103,20 @@ CREATE TABLE IF NOT EXISTS email_drafts (
 """
 
 
+MIGRATIONS = [
+    "ALTER TABLE decision_makers ADD COLUMN apollo_contact_id TEXT",
+    "ALTER TABLE decision_makers ADD COLUMN enrollment_status TEXT DEFAULT 'not_enrolled'",
+]
+
+
 def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        for sql in MIGRATIONS:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass  # column already exists
         conn.commit()
 
 

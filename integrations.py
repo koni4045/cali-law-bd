@@ -147,6 +147,38 @@ def apify_linkedin_jobs(search_urls, count=10):
     return _api("POST", url, params=params, json=body, timeout=120)
 
 
+def apollo_enroll_contact(contact_id, sequence_id, email_account_id):
+    """Enroll an Apollo contact into a sequence. Returns campaign status dict."""
+    headers = {"Content-Type": "application/json", "X-Api-Key": APOLLO_API_KEY}
+    data = _api(
+        "POST",
+        f"https://api.apollo.io/api/v1/emailer_campaigns/{sequence_id}/add_contact_ids",
+        headers=headers,
+        json={
+            "emailer_campaign_id": sequence_id,
+            "contact_ids": [contact_id],
+            "send_email_from_email_account_id": email_account_id,
+        },
+    )
+    contacts = data.get("contacts", [])
+    return contacts[0] if contacts else {}
+
+
+def apollo_create_contact(first_name, last_name, email, company_name, title=None):
+    """Create a contact in Apollo CRM. Returns the contact dict including its id."""
+    headers = {"Content-Type": "application/json", "X-Api-Key": APOLLO_API_KEY}
+    body = {
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
+        "organization_name": company_name,
+    }
+    if title:
+        body["title"] = title
+    data = _api("POST", f"{APOLLO_BASE}/contacts", headers=headers, json=body)
+    return data.get("contact", {})
+
+
 def build_linkedin_search_url(keyword, location="California"):
     from urllib.parse import quote
     return f"https://www.linkedin.com/jobs/search/?keywords={quote(keyword)}&location={quote(location)}"

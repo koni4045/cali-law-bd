@@ -12,6 +12,9 @@ from fastapi.templating import Jinja2Templates
 
 load_dotenv()
 
+APOLLO_SEQUENCE_ID    = os.getenv("APOLLO_SEQUENCE_ID")
+APOLLO_EMAIL_ACCOUNT  = os.getenv("APOLLO_EMAIL_ACCOUNT_ID")
+
 import integrations
 import matching
 import templates_email
@@ -390,11 +393,66 @@ def list_drafts(status: str = "pending_approval"):
 @app.post("/email-drafts/{draft_id}/approve")
 def approve_draft(draft_id: int):
     with get_conn() as conn:
-        cur = conn.execute("UPDATE email_drafts SET status = 'approved' WHERE id = ?", (draft_id,))
-        conn.commit()
-        if cur.rowcount == 0:
+        draft = conn.execute("SELECT * FROM email_drafts WHERE id = ?", (draft_id,)).fetchone()
+        if not draft:
             raise HTTPException(404, "Draft not found")
-    return {"draft_id": draft_id, "status": "approved"}
+
+        conn.execute("UPDATE email_drafts SET status = 'approved' WHERE id = ?", (draft_id,))
+
+        # Enroll decision maker into Apollo sequence
+        enrollment_result = {}
+        dm = None
+        if draft["decision_maker_id"]:
+            dm = conn.execute(
+                "SELECT * FROM decision_makers WHERE id = ?", (draft["decision_maker_id"],)
+            ).fetchone()
+
+        if dm and dm["email"] and APOLLO_SEQUENCE_ID and APOLLO_EMAIL_ACCOUNT:
+            try:
+                # Get or create Apollo contact ID
+                apollo_contact_id = dm["apollo_contact_id"]
+                if not apollo_contact_id:
+                    firm = conn.execute("SELECT name FROM firms WHERE id = ?", (dm["firm_id"],)).fetchone()
+                    name_parts = (dm["name"] or "").split(" ", 1)
+                    contact = integrations.apollo_create_contact(
+                        first_name=name_parts[0],
+                        last_name=name_parts[1] if len(name_parts) > 1 else "",
+                        email=dm["email"],
+                        company_name=firm["name"] if firm else "",
+                        title=dm["title"],
+                    )
+                    apollo_contact_id = contact.get("id")
+                    if apollo_contact_id:
+                        conn.execute(
+                            "UPDATE decision_makers SET apollo_contact_id = ? WHERE id = ?",
+                            (apollo_contact_id, dm["id"]),
+                        )
+
+                if apollo_contact_id:
+                    integrations.apollo_enroll_contact(
+                        apollo_contact_id, APOLLO_SEQUENCE_ID, APOLLO_EMAIL_ACCOUNT
+                    )
+                    conn.execute(
+                        "UPDATE decision_makers SET enrollment_status = 'enrolled' WHERE id = ?",
+                        (dm["id"],),
+                    )
+                    conn.execute(
+                        "UPDATE email_drafts SET status = 'enrolled' WHERE id = ?", (draft_id,)
+                    )
+                    enrollment_result = {"enrolled": True, "apollo_contact_id": apollo_contact_id}
+                else:
+                    enrollment_result = {"enrolled": False, "reason": "could not create Apollo contact"}
+
+            except Exception as e:
+                enrollment_result = {"enrolled": False, "reason": str(e)}
+        else:
+            reason = "no decision maker email" if not (dm and dm["email"]) else "sequence not configured"
+            enrollment_result = {"enrolled": False, "reason": reason}
+
+        conn.commit()
+
+    final_status = "enrolled" if enrollment_result.get("enrolled") else "approved"
+    return {"draft_id": draft_id, "status": final_status, "enrollment": enrollment_result}
 
 
 @app.post("/email-drafts/{draft_id}/reject")
