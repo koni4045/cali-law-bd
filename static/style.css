@@ -122,6 +122,14 @@ tr:hover td { background: #fafbfd; }
 .empty-state { background: #fff; border-radius: 10px; padding: 3rem; text-align: center; color: #9ca3af; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
 .empty-state p { margin-bottom: 0.5rem; }
 
+/* Bulk seed panel */
+.seed-panel { margin-bottom: 1.25rem; }
+.seed-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; }
+.seed-progress { margin-top: 1rem; }
+.progress-bar-wrap { background: #e5e7eb; border-radius: 99px; height: 10px; overflow: hidden; }
+.progress-bar { background: linear-gradient(90deg, #3b6ef5, #7c3aed); height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+.progress-label { margin-top: 6px; font-size: 12px; color: #555; }
+
 @media (max-width: 768px) {
   .two-col { grid-template-columns: 1fr; }
   .buckets { flex-wrap: wrap; }

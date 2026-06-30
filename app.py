@@ -1,6 +1,8 @@
 import io
 import json
 import os
+import threading
+import time
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -108,6 +110,127 @@ def seed_firms(practice_area: str = Form("law firm"), pages: int = Form(1)):
                     continue
         conn.commit()
     return {"firms_upserted": created}
+
+
+def _bulk_seed_worker(job_id: int, keyword: str, total_pages: int):
+    """Background thread: pages through all Apollo results, upserts firms, updates progress."""
+    added_total = 0
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE seed_jobs SET status='running', updated_at=? WHERE id=?",
+            (now_iso(), job_id),
+        )
+        conn.commit()
+
+    for page in range(1, total_pages + 1):
+        try:
+            data = integrations.apollo_org_search(
+                practice_area_keywords=keyword, page=page, per_page=25
+            )
+            orgs = data.get("organizations") or data.get("accounts") or []
+            page_added = 0
+            with get_conn() as conn:
+                for org in orgs:
+                    try:
+                        conn.execute(
+                            """INSERT INTO firms (name, website, domain, city, attorney_count,
+                                 linkedin_url, phone, source, last_updated)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, 'apollo', ?)
+                               ON CONFLICT(name, city) DO UPDATE SET
+                                 website=excluded.website, domain=excluded.domain,
+                                 attorney_count=excluded.attorney_count,
+                                 linkedin_url=excluded.linkedin_url,
+                                 phone=excluded.phone, last_updated=excluded.last_updated""",
+                            (
+                                org.get("name"),
+                                org.get("website_url"),
+                                org.get("primary_domain"),
+                                org.get("city") or "California",
+                                org.get("estimated_num_employees"),
+                                org.get("linkedin_url"),
+                                org.get("primary_phone", {}).get("number")
+                                    if isinstance(org.get("primary_phone"), dict) else None,
+                                now_iso(),
+                            ),
+                        )
+                        page_added += 1
+                    except Exception:
+                        continue
+                added_total += page_added
+                conn.execute(
+                    "UPDATE seed_jobs SET pages_done=?, firms_added=?, updated_at=? WHERE id=?",
+                    (page, added_total, now_iso(), job_id),
+                )
+                conn.commit()
+        except Exception:
+            time.sleep(5)
+            continue
+        time.sleep(0.5)  # polite rate limiting
+
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE seed_jobs SET status='done', pages_done=?, firms_added=?, updated_at=? WHERE id=?",
+            (total_pages, added_total, now_iso(), job_id),
+        )
+        conn.commit()
+
+
+@app.post("/firms/bulk-seed")
+def bulk_seed_firms(practice_area: str = Form("law firm")):
+    """Start a background job that pulls ALL pages from Apollo for the given keyword."""
+    # Get total pages first
+    data = integrations.apollo_org_search(practice_area_keywords=practice_area, page=1, per_page=25)
+    pagination = data.get("pagination", {})
+    total_pages = pagination.get("total_pages", 1)
+    total_entries = pagination.get("total_entries", 0)
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO seed_jobs (keyword, total_pages, pages_done, firms_added, status, started_at, updated_at) VALUES (?, ?, 0, 0, 'running', ?, ?)",
+            (practice_area, total_pages, now_iso(), now_iso()),
+        )
+        job_id = cur.lastrowid
+        conn.commit()
+
+    thread = threading.Thread(
+        target=_bulk_seed_worker,
+        args=(job_id, practice_area, total_pages),
+        daemon=True,
+    )
+    thread.start()
+
+    return {
+        "seed_job_id": job_id,
+        "keyword": practice_area,
+        "total_entries": total_entries,
+        "total_pages": total_pages,
+        "status": "running",
+        "progress_url": f"/firms/bulk-seed/{job_id}/progress",
+    }
+
+
+@app.get("/firms/bulk-seed/{job_id}/progress")
+def bulk_seed_progress(job_id: int):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM seed_jobs WHERE id=?", (job_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Seed job not found")
+        r = dict(row)
+        r["pct"] = round(r["pages_done"] / r["total_pages"] * 100) if r["total_pages"] else 0
+        return r
+
+
+@app.get("/firms/bulk-seed/latest")
+def bulk_seed_latest():
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM seed_jobs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if not row:
+            return {"status": "no_jobs"}
+        r = dict(row)
+        r["pct"] = round(r["pages_done"] / r["total_pages"] * 100) if r["total_pages"] else 0
+        return r
 
 
 @app.get("/firms/view/{firm_id}", response_class=HTMLResponse)

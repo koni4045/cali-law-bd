@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}CA Law Firm BD{% endblock %} — CA Law Firm BD</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/" class="brand">CA Law Firm BD</a>
+    <a href="/" {% if active_page == 'dashboard' %}class="active"{% endif %}>Dashboard</a>
+    <a href="/drafts" {% if active_page == 'drafts' %}class="active"{% endif %}>
+      Approval Queue
+      {% if pending_nav_count and pending_nav_count > 0 %}
+        <span class="badge-count">{{ pending_nav_count }}</span>
+      {% endif %}
+    </a>
+  </nav>
+
+  <div class="page">
+    {% block content %}{% endblock %}
+  </div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

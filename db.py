@@ -106,6 +106,16 @@ CREATE TABLE IF NOT EXISTS email_drafts (
 MIGRATIONS = [
     "ALTER TABLE decision_makers ADD COLUMN apollo_contact_id TEXT",
     "ALTER TABLE decision_makers ADD COLUMN enrollment_status TEXT DEFAULT 'not_enrolled'",
+    """CREATE TABLE IF NOT EXISTS seed_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        keyword TEXT,
+        total_pages INTEGER,
+        pages_done INTEGER DEFAULT 0,
+        firms_added INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'running',
+        started_at TEXT,
+        updated_at TEXT
+    )""",
 ]
 
 

@@ -1,86 +1,136 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>CA Law Firm BD Automation</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-  <nav class="topnav">
-    <span class="brand">CA Law Firm BD</span>
-    <a href="/" class="active">Dashboard</a>
-    <a href="/drafts">Approval Queue {% if pending_drafts > 0 %}<span class="badge-count">{{ pending_drafts }}</span>{% endif %}</a>
-  </nav>
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
 
-  <div class="page">
-    <h1>Dashboard <span class="sub">California · Phase 1 MVP</span></h1>
+{% block content %}
+<h1>Dashboard <span class="sub">California · Phase 1 MVP</span></h1>
 
-    <section class="stat-grid">
-      <div class="card"><span class="num">{{ firm_count }}</span><span class="label">Firms</span></div>
-      <div class="card"><span class="num">{{ job_count }}</span><span class="label">Active Jobs</span></div>
-      <div class="card"><span class="num">{{ dm_count }}</span><span class="label">Decision Makers</span></div>
-      <div class="card"><span class="num">{{ candidate_count }}</span><span class="label">Candidates</span></div>
-      <div class="card"><span class="num">{{ matched_candidates }}</span><span class="label">Matched</span></div>
-      <div class="card highlight"><span class="num">{{ pending_drafts }}</span><span class="label">Pending Approval</span></div>
-    </section>
-
-    <section class="buckets">
-      <a href="/drafts" class="bucket hot">Hot<span>{{ bucket_counts.get('Hot', 0) }}</span></a>
-      <a href="/drafts" class="bucket warm">Warm<span>{{ bucket_counts.get('Warm', 0) }}</span></a>
-      <a href="/drafts" class="bucket nurture">Nurture<span>{{ bucket_counts.get('Nurture', 0) }}</span></a>
-      <a href="/drafts" class="bucket monitor">Monitor<span>{{ bucket_counts.get('Monitor', 0) }}</span></a>
-    </section>
-
-    <section>
-      <h2>Top Leads</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Firm</th><th>City</th><th>Score</th><th>Bucket</th>
-            <th>Jobs</th><th>Decision Makers</th><th>Status</th><th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for l in top_leads %}
-          <tr>
-            <td><a href="/firms/view/{{ l['id'] }}">{{ l['name'] }}</a></td>
-            <td>{{ l['city'] or '—' }}</td>
-            <td><strong>{{ l['score'] }}</strong></td>
-            <td><span class="badge {{ l['bucket']|lower }}">{{ l['bucket'] }}</span></td>
-            <td>{{ l['job_count'] }}</td>
-            <td>
-              {{ l['dm_count'] }} found
-              {% if l['dm_with_email'] > 0 %}· <span class="green">{{ l['dm_with_email'] }} with email</span>{% endif %}
-            </td>
-            <td>
-              {% if l['enrolled'] > 0 %}
-                <span class="status enrolled">● Enrolled</span>
-              {% elif l['pending'] > 0 %}
-                <span class="status pending">● Pending</span>
-              {% else %}
-                <span class="status none">Not contacted</span>
-              {% endif %}
-            </td>
-            <td>
-              <a href="/firms/view/{{ l['id'] }}" class="btn">View →</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
-
-    <section>
-      <h2>Open Jobs by Role</h2>
-      <table>
-        <thead><tr><th>Title</th><th>Count</th></tr></thead>
-        <tbody>
-          {% for j in jobs_by_role %}
-          <tr><td>{{ j['title'] }}</td><td>{{ j['c'] }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
+<!-- Bulk seed controls + live progress -->
+<section class="card-panel seed-panel">
+  <div class="seed-top">
+    <div>
+      <strong>Bulk Firm Seeding</strong>
+      <span class="muted" style="margin-left:8px">Apollo · "law firm" · California · ~4,200 firms across 169 pages</span>
+    </div>
+    <form id="seedForm" style="display:inline">
+      <button type="submit" class="btn primary" id="seedBtn">Start Full Seed</button>
+    </form>
   </div>
-</body>
-</html>
+  <div id="seedProgress" class="seed-progress hidden">
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progressBar" style="width:0%"></div>
+    </div>
+    <div class="progress-label" id="progressLabel">Starting…</div>
+  </div>
+</section>
+
+<section class="stat-grid">
+  <div class="card"><span class="num">{{ firm_count }}</span><span class="label">Firms</span></div>
+  <div class="card"><span class="num">{{ job_count }}</span><span class="label">Active Jobs</span></div>
+  <div class="card"><span class="num">{{ dm_count }}</span><span class="label">Decision Makers</span></div>
+  <div class="card"><span class="num">{{ candidate_count }}</span><span class="label">Candidates</span></div>
+  <div class="card"><span class="num">{{ matched_candidates }}</span><span class="label">Matched</span></div>
+  <div class="card highlight"><span class="num">{{ pending_drafts }}</span><span class="label">Pending Approval</span></div>
+</section>
+
+<section class="buckets">
+  <a href="/drafts?status=pending_approval" class="bucket hot">Hot<span>{{ bucket_counts.get('Hot', 0) }}</span></a>
+  <a href="/drafts?status=pending_approval" class="bucket warm">Warm<span>{{ bucket_counts.get('Warm', 0) }}</span></a>
+  <a href="/drafts?status=pending_approval" class="bucket nurture">Nurture<span>{{ bucket_counts.get('Nurture', 0) }}</span></a>
+  <a href="/drafts?status=pending_approval" class="bucket monitor">Monitor<span>{{ bucket_counts.get('Monitor', 0) }}</span></a>
+</section>
+
+<section>
+  <h2>Top Leads</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Firm</th><th>City</th><th>Score</th><th>Bucket</th>
+        <th>Jobs</th><th>Decision Makers</th><th>Status</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in top_leads %}
+      <tr>
+        <td><a href="/firms/view/{{ l['id'] }}">{{ l['name'] }}</a></td>
+        <td>{{ l['city'] or '—' }}</td>
+        <td><strong>{{ l['score'] }}</strong></td>
+        <td><span class="badge {{ l['bucket']|lower }}">{{ l['bucket'] }}</span></td>
+        <td>{{ l['job_count'] }}</td>
+        <td>
+          {{ l['dm_count'] }} found
+          {% if l['dm_with_email'] > 0 %}· <span class="green">{{ l['dm_with_email'] }} with email</span>{% endif %}
+        </td>
+        <td>
+          {% if l['enrolled'] > 0 %}
+            <span class="status enrolled">● Enrolled</span>
+          {% elif l['pending'] > 0 %}
+            <span class="status pending">● Pending</span>
+          {% else %}
+            <span class="status none">Not contacted</span>
+          {% endif %}
+        </td>
+        <td><a href="/firms/view/{{ l['id'] }}" class="btn">View →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Open Jobs by Role</h2>
+  <table>
+    <thead><tr><th>Title</th><th>Count</th></tr></thead>
+    <tbody>
+      {% for j in jobs_by_role %}
+      <tr><td>{{ j['title'] }}</td><td>{{ j['c'] }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function checkExisting() {
+    const r = await fetch('/firms/bulk-seed/latest');
+    const d = await r.json();
+    if (d.status === 'running') { showProgress(); poll(d.id); }
+  }
+  checkExisting();
+
+  document.getElementById('seedForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('seedBtn');
+    btn.disabled = true; btn.textContent = 'Starting…';
+    const fd = new FormData();
+    fd.append('practice_area', 'law firm');
+    const r = await fetch('/firms/bulk-seed', {method:'POST', body: fd});
+    const d = await r.json();
+    showProgress();
+    poll(d.seed_job_id);
+  });
+
+  function showProgress() {
+    document.getElementById('seedProgress').classList.remove('hidden');
+    document.getElementById('seedBtn').disabled = true;
+    document.getElementById('seedBtn').textContent = 'Running…';
+  }
+
+  async function poll(jobId) {
+    const r = await fetch(`/firms/bulk-seed/${jobId}/progress`);
+    const d = await r.json();
+    document.getElementById('progressBar').style.width = d.pct + '%';
+    document.getElementById('progressLabel').textContent =
+      `Page ${d.pages_done} of ${d.total_pages} — ${d.firms_added} firms added (${d.pct}%)`;
+    if (d.status === 'running') {
+      setTimeout(() => poll(jobId), 2000);
+    } else {
+      document.getElementById('progressLabel').textContent =
+        `✓ Done — ${d.firms_added} firms seeded from ${d.total_pages} pages.`;
+      document.getElementById('seedBtn').textContent = 'Start Full Seed';
+      document.getElementById('seedBtn').disabled = false;
+      setTimeout(() => location.reload(), 2000);
+    }
+  }
+</script>
+{% endblock %}
