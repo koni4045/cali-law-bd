@@ -62,18 +62,10 @@ def apollo_resolve_domain(company_name):
 
 
 def apollo_people_search(organization_domain=None, organization_id=None, page=1, per_page=10):
-    """Find decision makers at a firm, prioritized by role category.
-
-    Apollo deprecated v1/mixed_people/search for API callers; results here are
-    previews with obfuscated names and no email/phone. Call apollo_people_match()
-    per person to reveal verified contact details (consumes Apollo credits).
-    """
+    """Find people at a firm. No title filter — Apollo's person_titles filter is too strict
+    and returns 0 results for most firms. We sort by priority locally after fetching."""
     headers = {"Content-Type": "application/json", "X-Api-Key": APOLLO_API_KEY}
-    body = {
-        "person_titles": DECISION_MAKER_PRIORITY,
-        "page": page,
-        "per_page": per_page,
-    }
+    body = {"page": page, "per_page": per_page}
     if organization_domain:
         body["q_organization_domains_list"] = [organization_domain]
     if organization_id:

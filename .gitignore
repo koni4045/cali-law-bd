@@ -5,3 +5,4 @@ __pycache__/
 .venv/
 uploads/*
 !uploads/.gitkeep
+*.pdf

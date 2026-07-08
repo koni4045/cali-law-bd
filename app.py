@@ -311,6 +311,12 @@ def enrich_firm(firm_id: int):
             if domain:
                 conn.execute("UPDATE firms SET domain = ? WHERE id = ?", (domain, firm_id))
 
+        # Strip protocol/path — Apollo needs bare hostname only
+        if domain:
+            from urllib.parse import urlparse
+            parsed = urlparse(domain if "://" in domain else "https://" + domain)
+            domain = parsed.hostname or domain
+
         added = 0
         revealed = 0
         if domain:
