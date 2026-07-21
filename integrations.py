@@ -105,6 +105,13 @@ TARGET_ROLES = [
     "Legal Billing Specialist", "Office Administrator", "Firm Administrator",
 ]
 
+LAW_SCHOOL_ROLES = [
+    "Paralegal law school", "Legal Assistant university",
+    "Clinical Program Coordinator law school", "Law School Administrator",
+    "Legal Research Assistant university", "Student Services Coordinator law school",
+    "Law Library Assistant", "Legal Clinic Coordinator",
+]
+
 
 def jsearch_search(query, location="California, USA", page=1, num_pages=1):
     headers = {
@@ -118,6 +125,18 @@ def jsearch_search(query, location="California, USA", page=1, num_pages=1):
 def jsearch_collect_all_roles(location="California, USA"):
     results = []
     for role in TARGET_ROLES:
+        try:
+            data = jsearch_search(role, location=location)
+            results.extend(data.get("data", []))
+        except requests.HTTPError:
+            continue
+        time.sleep(1)
+    return results
+
+
+def jsearch_collect_law_school_roles(location="California, USA"):
+    results = []
+    for role in LAW_SCHOOL_ROLES:
         try:
             data = jsearch_search(role, location=location)
             results.extend(data.get("data", []))

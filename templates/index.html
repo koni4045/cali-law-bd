@@ -4,6 +4,58 @@
 {% block content %}
 <h1>Dashboard <span class="sub">California · Phase 1 MVP</span></h1>
 
+<!-- Job alert scheduler -->
+<section class="card-panel" style="margin-bottom:1rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+    <div>
+      <strong>Job Alert Scheduler</strong>
+      <span class="muted" style="margin-left:8px">Polls every 15 min · SMS to +14753089941 on new postings</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem">
+      <span id="alertStatusBadge" class="status none">Checking…</span>
+      <button class="btn primary small" id="alertStartBtn" onclick="startAlerts()">Start</button>
+      <button class="btn secondary small" id="alertStopBtn" onclick="stopAlerts()">Stop</button>
+    </div>
+  </div>
+  <div id="alertNextRun" style="font-size:12px;color:#888;margin-top:6px"></div>
+</section>
+
+<!-- Alert history -->
+<section class="card-panel" style="margin-bottom:1rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+    <strong>Alert History</strong>
+    <span id="alertLogCount" class="count">—</span>
+  </div>
+  <div id="alertLogEmpty" class="muted" style="font-size:13px;display:none">No alerts sent yet. Scheduler will fire when new job postings are detected.</div>
+  <table id="alertLogTable" style="display:none;width:100%;border-collapse:collapse">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:6px 8px;font-size:12px;font-weight:600;color:#666;border-bottom:2px solid #f0f0f0">Time</th>
+        <th style="text-align:left;padding:6px 8px;font-size:12px;font-weight:600;color:#666;border-bottom:2px solid #f0f0f0">Job Title</th>
+        <th style="text-align:left;padding:6px 8px;font-size:12px;font-weight:600;color:#666;border-bottom:2px solid #f0f0f0">Firm</th>
+        <th style="text-align:left;padding:6px 8px;font-size:12px;font-weight:600;color:#666;border-bottom:2px solid #f0f0f0">Location</th>
+        <th style="text-align:left;padding:6px 8px;font-size:12px;font-weight:600;color:#666;border-bottom:2px solid #f0f0f0">Status</th>
+      </tr>
+    </thead>
+    <tbody id="alertLogBody"></tbody>
+  </table>
+</section>
+
+<!-- Law school seed + job collection -->
+<section class="card-panel" style="margin-bottom:1rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+    <div>
+      <strong>Law Universities</strong>
+      <span class="muted" style="margin-left:8px">Apollo · "law school" · California · seed orgs + collect jobs</span>
+    </div>
+    <div style="display:flex;gap:.75rem">
+      <button class="btn secondary small" id="lawSchoolSeedBtn" onclick="seedLawSchools()">Seed Law Schools</button>
+      <button class="btn secondary small" id="lawSchoolJobsBtn" onclick="collectLawSchoolJobs()">Collect Jobs</button>
+    </div>
+  </div>
+  <div id="lawSchoolResult" class="result-box hidden"></div>
+</section>
+
 <!-- Bulk seed controls + live progress -->
 <section class="card-panel seed-panel">
   <div class="seed-top">
@@ -91,6 +143,97 @@
 
 {% block scripts %}
 <script>
+  // ── Law school controls ──
+  async function seedLawSchools() {
+    const btn = document.getElementById('lawSchoolSeedBtn');
+    const box = document.getElementById('lawSchoolResult');
+    btn.disabled = true; btn.textContent = 'Seeding…';
+    box.className = 'result-box warning'; box.textContent = 'Seeding law schools from Apollo…'; box.classList.remove('hidden');
+    const fd = new FormData(); fd.append('practice_area', 'law school');
+    const r = await fetch('/firms/bulk-seed', {method:'POST', body: fd});
+    const d = await r.json();
+    box.className = 'result-box success';
+    box.textContent = `Seed started — ${d.total_pages} pages to process. Check progress in Bulk Seed section.`;
+    btn.disabled = false; btn.textContent = 'Seed Law Schools';
+  }
+
+  async function collectLawSchoolJobs() {
+    const btn = document.getElementById('lawSchoolJobsBtn');
+    const box = document.getElementById('lawSchoolResult');
+    btn.disabled = true; btn.textContent = 'Collecting…';
+    box.className = 'result-box warning'; box.textContent = 'Collecting law school job postings…'; box.classList.remove('hidden');
+    const r = await fetch('/jobs/collect-law-schools', {method:'POST'});
+    const d = await r.json();
+    box.className = 'result-box success';
+    box.textContent = `Done — ${d.jobs_upserted} law school jobs collected.`;
+    btn.disabled = false; btn.textContent = 'Collect Jobs';
+  }
+
+  // ── Alert scheduler controls ──
+  async function refreshAlertStatus() {
+    const r = await fetch('/alerts/status');
+    const d = await r.json();
+    const badge = document.getElementById('alertStatusBadge');
+    const next  = document.getElementById('alertNextRun');
+    if (d.running) {
+      badge.textContent = 'Running';
+      badge.className = 'status enrolled';
+      next.textContent = d.next_run ? `Next check: ${d.next_run}` : '';
+    } else {
+      badge.textContent = 'Stopped';
+      badge.className = 'status none';
+      next.textContent = '';
+    }
+  }
+
+  async function startAlerts() {
+    document.getElementById('alertStartBtn').disabled = true;
+    await fetch('/alerts/start', {method:'POST'});
+    await refreshAlertStatus();
+    document.getElementById('alertStartBtn').disabled = false;
+  }
+
+  async function stopAlerts() {
+    document.getElementById('alertStopBtn').disabled = true;
+    await fetch('/alerts/stop', {method:'POST'});
+    await refreshAlertStatus();
+    document.getElementById('alertStopBtn').disabled = false;
+  }
+
+  async function refreshAlertLog() {
+    const r = await fetch('/alerts/log');
+    const logs = await r.json();
+    document.getElementById('alertLogCount').textContent = logs.length;
+    if (logs.length === 0) {
+      document.getElementById('alertLogEmpty').style.display = 'block';
+      document.getElementById('alertLogTable').style.display = 'none';
+      return;
+    }
+    document.getElementById('alertLogEmpty').style.display = 'none';
+    document.getElementById('alertLogTable').style.display = 'table';
+    const tbody = document.getElementById('alertLogBody');
+    tbody.innerHTML = logs.map(l => {
+      const sent = new Date(l.sent_at).toLocaleString();
+      const isFailed = l.message.includes('[failed');
+      const statusBadge = isFailed
+        ? '<span style="color:#dc2626;font-size:11px;font-weight:600">Failed</span>'
+        : '<span style="color:#16a34a;font-size:11px;font-weight:600">Sent</span>';
+      return `<tr>
+        <td style="padding:7px 8px;border-bottom:1px solid #f4f5f7;font-size:12px;color:#888">${sent}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f4f5f7;font-size:13px">${l.job_title || '—'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f4f5f7;font-size:13px">${l.firm_name || '—'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f4f5f7;font-size:12px;color:#666">${l.location || '—'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f4f5f7">${statusBadge}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  refreshAlertStatus();
+  refreshAlertLog();
+  setInterval(refreshAlertStatus, 30000);
+  setInterval(refreshAlertLog, 60000);
+
+  // ── Seed controls ──
   async function checkExisting() {
     const r = await fetch('/firms/bulk-seed/latest');
     const d = await r.json();

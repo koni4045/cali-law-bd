@@ -116,6 +116,14 @@ MIGRATIONS = [
         started_at TEXT,
         updated_at TEXT
     )""",
+    """CREATE TABLE IF NOT EXISTS alert_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_title TEXT,
+        firm_name TEXT,
+        location TEXT,
+        message TEXT,
+        sent_at TEXT
+    )""",
 ]
 
 

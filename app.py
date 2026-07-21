@@ -18,6 +18,7 @@ APOLLO_SEQUENCE_ID    = os.getenv("APOLLO_SEQUENCE_ID")
 APOLLO_EMAIL_ACCOUNT  = os.getenv("APOLLO_EMAIL_ACCOUNT_ID")
 
 import integrations
+import alerts
 import matching
 import templates_email
 from db import get_conn, init_db
@@ -416,6 +417,47 @@ def collect_jobs():
     return {"jobs_upserted": created}
 
 
+@app.post("/jobs/collect-law-schools")
+def collect_law_school_jobs():
+    """Collect jobs from CA law schools via JSearch using law-school-specific roles."""
+    created = 0
+    with get_conn() as conn:
+        raw_jobs = integrations.jsearch_collect_law_school_roles()
+        for j in raw_jobs:
+            employer = j.get("employer_name")
+            if not employer:
+                continue
+            firm = conn.execute("SELECT id FROM firms WHERE name = ?", (employer,)).fetchone()
+            firm_id = firm["id"] if firm else None
+            if not firm_id:
+                cur = conn.execute(
+                    """INSERT INTO firms (name, website, domain, city, source, last_updated)
+                       VALUES (?, ?, ?, ?, 'jsearch_law_school', ?)
+                       ON CONFLICT(name, city) DO NOTHING""",
+                    (employer, j.get("employer_website"), j.get("employer_website"),
+                     j.get("job_city") or "California", now_iso()),
+                )
+                row = conn.execute("SELECT id FROM firms WHERE name = ?", (employer,)).fetchone()
+                firm_id = row["id"] if row else None
+            try:
+                conn.execute(
+                    """INSERT INTO jobs (firm_id, title, firm_name, location, work_mode, description,
+                           posted_date, source_url, source, active, last_checked)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'jsearch_law_school', 1, ?)
+                       ON CONFLICT(title, firm_name, source_url) DO UPDATE SET
+                           last_checked=excluded.last_checked, active=1""",
+                    (firm_id, j.get("job_title"), employer, j.get("job_city"),
+                     "remote" if j.get("job_is_remote") else "onsite",
+                     j.get("job_description"), j.get("job_posted_at_datetime_utc"),
+                     j.get("job_apply_link") or j.get("job_id"), now_iso()),
+                )
+                created += 1
+            except Exception:
+                continue
+        conn.commit()
+    return {"jobs_upserted": created}
+
+
 @app.post("/jobs/collect-linkedin")
 def collect_linkedin_jobs(keyword: str = Form(...), location: str = Form("California")):
     url = integrations.build_linkedin_search_url(keyword, location)
@@ -653,6 +695,32 @@ def reject_draft(draft_id: int):
         if cur.rowcount == 0:
             raise HTTPException(404, "Draft not found")
     return {"draft_id": draft_id, "status": "rejected"}
+
+
+# ── Alert scheduler ──────────────────────────────────────────────────────────
+
+@app.post("/alerts/start")
+def start_alerts():
+    return alerts.start_scheduler()
+
+
+@app.post("/alerts/stop")
+def stop_alerts():
+    return alerts.stop_scheduler()
+
+
+@app.get("/alerts/status")
+def alert_status():
+    return alerts.scheduler_status()
+
+
+@app.get("/alerts/log")
+def alert_log():
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM alert_log ORDER BY sent_at DESC LIMIT 100"
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 if __name__ == "__main__":
